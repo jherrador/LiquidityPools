@@ -23,21 +23,18 @@ contract SwapAppV2 {
         V2FactoryAddress = V2FactoryAddress_;
     }
 
-    function swapTokens(
-        uint256 amountIn_,
-        uint256 slippage_,
-        address[] memory path_,
-        address to_,
-        uint256 deadline_
-    ) public returns (address tokenIn, address tokenOut, uint256 amountTokensOut) {
+    function swapTokens(uint256 amountIn_, uint256 slippage_, address[] memory path_, address to_, uint256 deadline_)
+        public
+        returns (address tokenIn, address tokenOut, uint256 amountTokensOut)
+    {
         if (!_validPath(path_)) {
             revert InvalidPath(path_);
         }
 
         IERC20(path_[0]).safeTransferFrom(msg.sender, address(this), amountIn_);
-        
+        IERC20(path_[0]).approve(V2Router02Address, amountIn_);
         uint256 amountOutMin_ = getAmountWithslippage(amountIn_, path_, slippage_);
-        
+
         uint256[] memory swapAmounts_ =
             IV2Router02(V2Router02Address).swapExactTokensForTokens(amountIn_, amountOutMin_, path_, to_, deadline_);
 
@@ -48,49 +45,59 @@ contract SwapAppV2 {
         emit SwapTokens(tokenIn, tokenOut, amountIn_, amountTokensOut);
     }
 
-    function addLiquidity(
-        address tokenA_,
-        address tokenB_,
-        uint256 amountAIn_,
+    function addLiquiditySingleToken(
+        address token1_,
+        address token0_,
+        uint256 amount0In_,
         uint256 swapSlippage_,
         uint256 liquiditySlippage_,
         address[] memory path_,
         uint256 deadline_
-    ) external returns (uint256 lpTokenAmount){
-        require(tokenA_ == path_[0], "TokenA address not in path");
-        require(tokenB_ == path_[path_.length - 1], "TokenB address not in path");
+    ) external returns (uint256 transferedTokens0, uint256 transferedTokens1, uint256 lpTokenAmount) {
+        require(token1_ == path_[0], "TokenA address not in path");
+        require(token0_ == path_[path_.length - 1], "TokenB address not in path");
 
-        uint256 amountDesiredTokensA = amountAIn_ / 2;
+        uint256 amountDesiredToken0 = amount0In_ / 2;
 
-        (,, uint256 amountDesiredTokensB) =
-            swapTokens(amountDesiredTokensA, swapSlippage_, path_, address(this), deadline_);
+        (,, uint256 amountTokensBAfterSwap) =
+            swapTokens(amountDesiredToken0, swapSlippage_, path_, address(this), deadline_);
 
-        uint256 amountAMin_ = amountDesiredTokensA * (10_000 - liquiditySlippage_) / 10_000;
-        uint256 amountBMin_ = amountDesiredTokensB * (10_000 - liquiditySlippage_) / 10_000;
+        uint256 amountAMin_ = (amount0In_ - amountDesiredToken0) * (10_000 - liquiditySlippage_) / 10_000;
+        uint256 amountBMin_ = amountTokensBAfterSwap * (10_000 - liquiditySlippage_) / 10_000;
 
-        IERC20(tokenA_).approve(V2Router02Address, amountAMin_);
-        IERC20(tokenB_).approve(V2Router02Address, amountBMin_);
+        IERC20(token1_).approve(V2Router02Address, amountDesiredToken0);
+        IERC20(token1_).safeTransferFrom(msg.sender, address(this), amount0In_ - amountDesiredToken0);
+        IERC20(token0_).approve(V2Router02Address, amountTokensBAfterSwap);
 
-        (,, lpTokenAmount) = IV2Router02(V2Router02Address)
+        (transferedTokens0, transferedTokens1, lpTokenAmount) = IV2Router02(V2Router02Address)
             .addLiquidity(
-                tokenA_,
-                tokenB_,
-                amountDesiredTokensA,
-                amountDesiredTokensB,
+                token1_,
+                token0_,
+                amountDesiredToken0,
+                amountTokensBAfterSwap,
                 amountAMin_,
                 amountBMin_,
                 msg.sender,
                 deadline_
             );
 
-        emit AddLiquidity(tokenA_, tokenB_, lpTokenAmount);
+        emit AddLiquidity(token1_, token0_, lpTokenAmount);
     }
 
-    function getAmountWithslippage(uint256 amountIn_, address[] memory path_, uint256 slippage_) public returns(uint256){
+    function getAmountWithslippage(uint256 amountIn_, address[] memory path_, uint256 slippage_)
+        public
+        returns (uint256)
+    {
         uint256[] memory quoteAmounts_ = IV2Router02(V2Router02Address).getAmountsOut(amountIn_, path_);
         uint256 amountOutMin_ = quoteAmounts_[quoteAmounts_.length - 1] * (10_000 - slippage_) / 10_000;
 
         return amountOutMin_;
+    }
+
+    function getExpectedAmount(uint256 amountIn_, address[] memory path_) public returns (uint256) {
+        uint256[] memory quoteAmounts_ = IV2Router02(V2Router02Address).getAmountsOut(amountIn_, path_);
+
+        return quoteAmounts_[quoteAmounts_.length - 1];
     }
 
     function _validPath(address[] memory path) private view returns (bool) {

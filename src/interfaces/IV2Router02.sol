@@ -3,7 +3,7 @@
 pragma solidity 0.8.30;
 
 interface IV2Router02 {
-    function getAmountsOut(uint amountIn, address[] memory path) external returns (uint[] memory amounts);
+    function getAmountsOut(uint256 amountIn, address[] memory path) external returns (uint256[] memory amounts);
 
     function swapExactTokensForTokens(
         uint256 amountIn,
