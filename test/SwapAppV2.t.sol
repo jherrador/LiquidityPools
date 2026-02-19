@@ -13,6 +13,9 @@ contract SwapAppV2Test is Test {
     address V2Router02Address = 0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24;
     address V2FactoryAddress = 0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6;
     address user = 0x048ef1062cbb39B338Ac2685dA72adf104b4cEF5;
+    address usdcTokenAddress = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address usdbcTokenAddress = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
+    address wrongTokenAddress = 0xA2b9436D567A740357ca432b35582E93191e6a2F;
 
     function setUp() public {
         app = new SwapAppV2(V2Router02Address, V2FactoryAddress);
@@ -24,44 +27,40 @@ contract SwapAppV2Test is Test {
 
     function testSwapTokensCorrectly() public {
         uint256 deadline_ = block.timestamp + 30 seconds;
-        address usdcTokenAddress_ = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-        address usdbcTokenAddress_ = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
-        uint256 amountIn_ = 5 * 10 ^ IERC20Metadata(usdcTokenAddress_).decimals();
-        uint256 userUsdcBalanceBefore_ = IERC20(usdcTokenAddress_).balanceOf(user);
-        uint256 userUsdbcBalanceBefore_ = IERC20(usdbcTokenAddress_).balanceOf(user);
+        uint256 amountIn_ = 5 * 10 ^ IERC20Metadata(usdcTokenAddress).decimals();
+        uint256 userUsdcBalanceBefore_ = IERC20(usdcTokenAddress).balanceOf(user);
+        uint256 userUsdbcBalanceBefore_ = IERC20(usdbcTokenAddress).balanceOf(user);
         uint256 slippage_ = 300;
 
         vm.startPrank(user);
 
-        IERC20(usdcTokenAddress_).approve(address(app), amountIn_);
+        IERC20(usdcTokenAddress).approve(address(app), amountIn_);
 
         address[] memory path_ = new address[](2);
-        path_[0] = usdcTokenAddress_;
-        path_[1] = usdbcTokenAddress_;
+        path_[0] = usdcTokenAddress;
+        path_[1] = usdbcTokenAddress;
         (,, uint256 amountTokensOut) = app.swapTokens(amountIn_, slippage_, path_, user, deadline_);
 
         uint256 amountOutMin_ = app.getAmountWithslippage(amountIn_, path_, slippage_);
 
-        assert(IERC20(usdcTokenAddress_).balanceOf(user) == userUsdcBalanceBefore_ - amountIn_);
-        assert(IERC20(usdbcTokenAddress_).balanceOf(user) >= userUsdbcBalanceBefore_ + amountOutMin_);
+        assert(IERC20(usdcTokenAddress).balanceOf(user) == userUsdcBalanceBefore_ - amountIn_);
+        assert(IERC20(usdbcTokenAddress).balanceOf(user) >= userUsdbcBalanceBefore_ + amountOutMin_);
         assert(amountTokensOut >= amountOutMin_);
         vm.stopPrank();
     }
 
     function testSwapTokensRevertWrongPath() public {
         uint256 deadline_ = block.timestamp + 30 seconds;
-        address usdcTokenAddress_ = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-        address usdbcTokenAddress_ = 0xA2b9436D567A740357ca432b35582E93191e6a2F;
         uint256 slippage_ = 300;
-        uint256 amountIn_ = 5 * 10 ^ IERC20Metadata(usdcTokenAddress_).decimals();
+        uint256 amountIn_ = 5 * 10 ^ IERC20Metadata(usdcTokenAddress).decimals();
 
         vm.startPrank(user);
 
-        IERC20(usdcTokenAddress_).approve(address(app), amountIn_);
+        IERC20(usdcTokenAddress).approve(address(app), amountIn_);
 
         address[] memory path_ = new address[](2);
-        path_[0] = usdcTokenAddress_;
-        path_[1] = usdbcTokenAddress_;
+        path_[0] = usdcTokenAddress;
+        path_[1] = wrongTokenAddress;
 
         vm.expectRevert();
         app.swapTokens(amountIn_, slippage_, path_, user, deadline_);
@@ -70,26 +69,24 @@ contract SwapAppV2Test is Test {
 
     function testAddLiquidityCorrectly() public {
         uint256 deadline_ = block.timestamp + 30 seconds;
-        address usdcTokenAddress_ = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-        address usdbcTokenAddress_ = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
-        uint256 amountIn_ = 5 * 10 ^ IERC20Metadata(usdcTokenAddress_).decimals();
+        uint256 amountIn_ = 5 * 10 ^ IERC20Metadata(usdcTokenAddress).decimals();
         uint256 swapSlippage_ = 300;
         uint256 liquiditySlippage_ = 300;
-        uint256 userUsdcBalanceBefore_ = IERC20(usdcTokenAddress_).balanceOf(user);
+        uint256 userUsdcBalanceBefore_ = IERC20(usdcTokenAddress).balanceOf(user);
 
         address[] memory path_ = new address[](2);
-        path_[0] = usdcTokenAddress_;
-        path_[1] = usdbcTokenAddress_;
+        path_[0] = usdcTokenAddress;
+        path_[1] = usdbcTokenAddress;
 
         vm.startPrank(user);
 
-        IERC20(usdcTokenAddress_).approve(address(app), amountIn_ * 2);
+        IERC20(usdcTokenAddress).approve(address(app), amountIn_ * 2);
 
         (,, uint256 lpTokenAmount) = app.addLiquiditySingleToken(
             path_[0], path_[path_.length - 1], amountIn_, swapSlippage_, liquiditySlippage_, path_, deadline_
         );
 
-        uint256 userUsdcBalanceAfter_ = IERC20(usdcTokenAddress_).balanceOf(user);
+        uint256 userUsdcBalanceAfter_ = IERC20(usdcTokenAddress).balanceOf(user);
         assert(userUsdcBalanceAfter_ == userUsdcBalanceBefore_ - amountIn_);
 
         address lpTokenAddress = IV2Factory(V2FactoryAddress).getPair(path_[0], path_[path_.length - 1]);
