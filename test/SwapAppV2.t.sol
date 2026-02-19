@@ -39,9 +39,12 @@ contract SwapAppV2Test is Test {
         address[] memory path_ = new address[](2);
         path_[0] = usdcTokenAddress;
         path_[1] = usdbcTokenAddress;
-        (,, uint256 amountTokensOut) = app.swapTokens(amountIn_, slippage_, path_, user, deadline_);
 
-        uint256 amountOutMin_ = app.getAmountWithslippage(amountIn_, path_, slippage_);
+        uint256 amountBMin_ = _getAmountWithslippage(amountIn_, path_, slippage_);
+
+        (,, uint256 amountTokensOut) = app.swapTokens(amountIn_, amountBMin_, path_, user, deadline_);
+
+        uint256 amountOutMin_ = _getAmountWithslippage(amountIn_, path_, slippage_);
 
         assert(IERC20(usdcTokenAddress).balanceOf(user) == userUsdcBalanceBefore_ - amountIn_);
         assert(IERC20(usdbcTokenAddress).balanceOf(user) >= userUsdbcBalanceBefore_ + amountOutMin_);
@@ -68,6 +71,32 @@ contract SwapAppV2Test is Test {
     }
 
     function testAddLiquidityCorrectly() public {
+        _addLiquidity();
+    }
+
+    function testRemoveLiquidity() external {
+        uint256 deadline_ = block.timestamp + 30 seconds;
+        address[] memory path_ = new address[](2);
+        path_[0] = usdcTokenAddress;
+        path_[1] = usdbcTokenAddress;
+
+        address lpTokenAddress = IV2Factory(V2FactoryAddress).getPair(path_[0], path_[path_.length - 1]);
+
+        _addLiquidity();
+
+        uint256 lpTokenAmount = IERC20(lpTokenAddress).balanceOf(user);
+        console.log("lpTokenAmount", lpTokenAmount);
+
+        vm.startPrank(user);
+        IERC20(lpTokenAddress).approve(address(app), lpTokenAmount);
+        app.removeLiquidity(path_[0], path_[path_.length - 1], lpTokenAmount, 0, 0, user, deadline_);
+
+        vm.stopPrank();
+    }
+
+    // Helper
+
+    function _addLiquidity() internal {
         uint256 deadline_ = block.timestamp + 30 seconds;
         uint256 amountIn_ = 5 * 10 ^ IERC20Metadata(usdcTokenAddress).decimals();
         uint256 swapSlippage_ = 300;
@@ -82,8 +111,12 @@ contract SwapAppV2Test is Test {
 
         IERC20(usdcTokenAddress).approve(address(app), amountIn_ * 2);
 
+        uint256 amountDesiredToken0 = amountIn_ / 2;
+        uint256 amountAMin_ = (amountIn_ - amountDesiredToken0) * (10_000 - liquiditySlippage_) / 10_000;
+        uint256 amountBMin_ = _getAmountWithslippage(amountAMin_, path_, swapSlippage_);
+
         (,, uint256 lpTokenAmount) = app.addLiquiditySingleToken(
-            path_[0], path_[path_.length - 1], amountIn_, swapSlippage_, liquiditySlippage_, path_, deadline_
+            path_[0], path_[path_.length - 1], amountIn_, amountAMin_, amountBMin_, amountBMin_, path_, deadline_
         );
 
         uint256 userUsdcBalanceAfter_ = IERC20(usdcTokenAddress).balanceOf(user);
@@ -93,5 +126,15 @@ contract SwapAppV2Test is Test {
         assert(lpTokenAmount >= IERC20(lpTokenAddress).balanceOf(user));
 
         vm.stopPrank();
+    }
+
+    function _getAmountWithslippage(uint256 amountIn_, address[] memory path_, uint256 slippage_)
+        internal
+        returns (uint256)
+    {
+        uint256[] memory quoteAmounts_ = IV2Router02(V2Router02Address).getAmountsOut(amountIn_, path_);
+        uint256 amountOutMin_ = quoteAmounts_[quoteAmounts_.length - 1] * (10_000 - slippage_) / 10_000;
+
+        return amountOutMin_;
     }
 }
